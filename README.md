@@ -21,3 +21,8 @@ There are 4 main stages to data shift monitoring:
 - https://torchdrift.org/notebooks/drift_detection_on_images.html
 - https://whylogs.readthedocs.io/en/latest/
 - https://www.nannyml.com/
+
+### Architecture
+- Dagster - orchestration
+- Feast - feature store
+- MLFlow - model tracking and storage
