@@ -1,29 +1,12 @@
 import tempfile
 from typing import List
 
-from PIL import Image
 from dagster import get_dagster_logger, graph, op, resource
-from fsspec.implementations.local import LocalFileSystem
 
-import easyocr
-from pdf2image import convert_from_path
-
-
-@dataclass
-class PDFPageImage:
-    pdf_name: str
-    page_no: int
-    image: Image
-
-
-@resource
-def file_system():
-    return LocalFileSystem()
-
-
-@resource
-def es_writer():
-    return None
+from model.data import PDFPageImage, get_images_from_pdf
+from model.ocr import load_model
+from resources.file_systems import local_file_system
+from resources.search_indices import elasticsearch
 
 
 @op(config_schema={"input_path": str}, required_resource_keys={"fs"})
@@ -38,12 +21,9 @@ def pdfs_to_images(context, pdfs: List[str]) -> List[PDFPageImage]:
     if pdfs:
         for pdf in pdfs:
             # TODO: Logging each pdf completion
-            _tempfile = tempfile.NamedTemporaryFile()
-            context.resources.fs.get(pdf, _tempfile.name)
-            images = convert_from_path(_tempfile.name)
-            for page_no, image in enumerate(images):
-                results.append(PDFPageImage(pdf, page_no, image))
-            _tempfile.close()
+            # TODO: Error handling for get_images_from_pdf - image need not be pdf
+            _images = get_images_from_pdf(context.resources.fs, pdf)
+            results.extend(_images)
     get_dagster_logger().info(f"Found {len(results)} images")
     return results
 
@@ -56,11 +36,7 @@ def monitor_data_drift(input_pdfs: List[PDFPageImage]):
 
 @op  # (config_schema={"tracking_uri": str, "version": int})
 def ocr_predictions(context, datapoints: List[PDFPageImage]) -> List[PDFPageImage]:
-    model = easyocr.Reader(
-        lang_list=["en"],
-        download_enabled=True,
-        # model_storage_directory=models_dir,
-    )
+    model = load_model()
 
     for data in datapoints:
         # TODO: Logging every N image completion
@@ -77,6 +53,7 @@ def ocr_predictions(context, datapoints: List[PDFPageImage]) -> List[PDFPageImag
 @op(required_resource_keys={"search_index"})
 def store_prediction_metrics(context, result: List[PDFPageImage]):
     pass
+
 
 @op(required_resource_keys={"fs", "search_index"})
 def store_predictions(context, result: List[PDFPageImage]):
@@ -97,9 +74,9 @@ if __name__ == "__main__":
     job = pipeline.to_job(
         name="OCR_test_job",
         resource_defs={
-            "fs": file_system,
-            "search_index": es_writer,
-            "data_logger": es_writer,
+            "fs": local_file_system,
+            "search_index": elasticsearch,
+            "data_logger": elasticsearch,
         },
     )
     job.execute_in_process()
