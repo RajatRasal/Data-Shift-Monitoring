@@ -1,3 +1,4 @@
+import math
 from typing import List
 
 from dagster import get_dagster_logger, graph, op, repository
@@ -7,9 +8,8 @@ from models.data import (
     get_images_from_pdf,
     find_pdfs_by_glob,
 )
-from models.ocr import PDFOCRResult, load_model, ocr_predictions
-from resources import file_systems
-from resources import search_indices
+from models.ocr import PDFOCRResult
+from resources import file_systems, search_indices, models
 
 
 # TODO: Play around with minio instead of local file system.
@@ -58,27 +58,30 @@ def pdfs_to_images(context, pdfs: List[str]) -> List[PDFPageImage]:
     return results
 
 
-@op(required_resource_keys={"data_logger"})
-def monitor_data_drift(input_pdfs: List[PDFPageImage]):
+@op(required_resource_keys={"data_drift_model", "data_logger"})
+def monitor_data_drift(context, input_pdfs: List[PDFPageImage]):
     # TODO: Considerations about data lineage
-    pass
+    # TODO: Better wrapping for img_arr and predict function
+    img_arr = [pdf.image for pdf in input_pdfs]
+    drift_score = context.resources.data_drift_model.predict(img_arr)
+    context.resources.data_logger.log(drift_score)
+    get_dagster_logger().info(f"Drift score: {drift_score}")
 
 
 # TODO: Dynamic out for each image K8s executor. 
-@op  # (config_schema={"tracking_uri": str, "version": int})
+# (config_schema={"tracking_uri": str, "version": int})
+@op(required_resource_keys={"ocr_model"})
 def ocr_predictions(
     context,
     datapoints: List[PDFPageImage],
 ) -> List[PDFOCRResult]:
-    model = load_model()
-
     ocr_results = []
-    for data in datapoints:
-        # TODO: Logging every N image completion
+    for i, data in enumerate(datapoints):
+        if i % 100 == 0:
+            get_dagster_logger().info(f"Processing image {i + 1}")
         # TODO: Maybe do this batchwise using toolz + DynamicOut
-        results = ocr_predictions(model, data.image)
+        results = context.resources.ocr_model.predict(data)
         ocr_results.append(PDFOCRResult(data, results))
-
     return ocr_results
 
 
@@ -91,7 +94,7 @@ def store_prediction_metrics(context, result: List[PDFOCRResult]):
 
 @op(required_resource_keys={"fs", "search_index"})
 def store_predictions(context, result: List[PDFOCRResult]):
-    # store writing to s3 and images to f3
+    # store writing to es and images to s3
     pass
 
 
@@ -118,12 +121,14 @@ def failure_pipeline():
 @repository
 def repo():
     # TODO: Automatic trigger with minio when new data is dumped into it.
-    # TODO: Use grafana for data logging.
     job = pipeline.to_job(
         name="OCR_test_job",
         resource_defs={
             "fs": file_systems.local_file_system,
+            "ocr_model": models.ocr_model,
+            "data_drift_model": models.data_drift_model,
             "search_index": search_indices.elasticsearch,
+            # TODO: Use grafana for data logging.
             "data_logger": search_indices.elasticsearch,
         },
         config={"ops": {"find_pdfs": {"config": {"input_path": "OCR_TEXT"}}}},
