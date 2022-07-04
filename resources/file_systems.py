@@ -12,4 +12,3 @@ def local_file_system():
 @resource
 def s3_file_system():
     return S3FileSystem()
-
