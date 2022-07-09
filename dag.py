@@ -1,7 +1,8 @@
-import math
 from typing import List
 
 from dagster import get_dagster_logger, graph, op, repository
+from dagster_prometheus.resources import prometheus_resource
+from prometheus_client import Gauge
 
 from models.data import (
     PDFPageImage,
@@ -58,16 +59,43 @@ def pdfs_to_images(context, pdfs: List[str]) -> List[PDFPageImage]:
     return results
 
 
-@op(required_resource_keys={"data_drift_model", "data_logger"})
-def monitor_data_drift(context, input_pdfs: List[PDFPageImage]):
+@op(required_resource_keys={"data_drift_model"})
+def monitor_data_drift(context, input_pdfs: List[PDFPageImage]) -> float:
     # TODO: Considerations about data lineage
     # TODO: Better wrapping for img_arr and predict function
+    # TODO: Store image embedding from inside the model - histogram
+    # TODO: Store embeddings from PCA - histogram
     # TODO: Data drift model should be specific to the true distirbution of
     #    a particular production model.
     img_arr = [pdf.image for pdf in input_pdfs]
+    # TODO: If this is a large batch split up, return List[float]
     drift_score = context.resources.data_drift_model.predict(img_arr)
-    context.resources.data_logger.log(drift_score)
     get_dagster_logger().info(f"Drift score: {drift_score}")
+    return drift_score
+
+
+@op(required_resource_keys={"prometheus"})
+def store_data_drift(context, data_drift_score: float):
+    # Model id, dagster run id, score
+    time_gauge = Gauge(
+        'drift_score_time_unixtime',
+        'Time when drift score was calculated',
+        registry=context.resources.prometheus.registry,
+    )
+    drift_score_gauge = Gauge(
+        'drift_score_mse',
+        'Drift score',
+        registry=context.resources.prometheus.registry,
+    )
+    time_gauge.set_to_current_time()
+    drift_score_gauge.set(data_drift_score)
+    context.resources.prometheus.push_to_gateway(
+        job='drift_score',
+        grouping_key={
+            "ocr_model_version": "test",
+            "drift_model_version": "test",
+        },
+    )
 
 
 # TODO: Dynamic out for each image K8s executor. 
@@ -87,10 +115,22 @@ def ocr_predictions(
     return ocr_results
 
 
-@op(required_resource_keys={"search_index"})
-def store_prediction_metrics(context, result: List[PDFOCRResult]):
+@op
+def calculate_prediction_metrics(results: List[PDFOCRResult]):
     # TODO: Number of words detected
     # TODO: Size of boxes detected
+    # Per image metrics
+    for pdf_result in results:
+        words_count = 0
+        size = []
+        for detection in pdf_result.detections:
+            words_count += len(detection.text.split(" "))
+            size = []
+    pass
+
+
+@op(required_resource_keys={"search_index"})
+def store_prediction_metrics(context, result: List[PDFOCRResult]):
     pass
 
 
@@ -100,24 +140,24 @@ def store_predictions(context, result: List[PDFOCRResult]):
     pass
 
 
+def _pipeline(pdf_paths):
+    datapoints = pdfs_to_images(pdf_paths)
+    store_data_drift(monitor_data_drift(datapoints))
+    # predictions = ocr_predictions(datapoints)
+    # store_prediction_metrics(calculate_prediction_metrics(predictions))
+    # store_predictions(predictions)
+
+
 @graph
 def pipeline():
     pdf_paths = find_pdfs()
-    datapoints = pdfs_to_images(pdf_paths)
-    monitor_data_drift(datapoints)
-    predictions = ocr_predictions(datapoints)
-    store_prediction_metrics(predictions)
-    store_predictions(predictions)
+    _pipeline(pdf_paths)
 
 
 @graph
 def failure_pipeline():
     pdf_paths = reprocess_failures()
-    datapoints = pdfs_to_images(pdf_paths)
-    monitor_data_drift(datapoints)
-    predictions = ocr_predictions(datapoints)
-    store_prediction_metrics(predictions)
-    store_predictions(predictions)
+    _pipeline(pdf_paths)
 
 
 @repository
@@ -131,9 +171,10 @@ def repo():
             "data_drift_model": models.data_drift_model,
             "reconstruction_model": models.reconstruction_model,
             "search_index": search_indices.elasticsearch,
-            # TODO: Use grafana for data logging.
-            "data_logger": search_indices.elasticsearch,
+            # TODO: Use prometheus for data logging.
+            "prometheus": prometheus_resource,
         },
-        config={"ops": {"find_pdfs": {"config": {"input_path": "OCR_TEXT"}}}},
+        config={"ops": {"find_pdfs": {"config": {"input_path": "OCR_TEXT"}}},
+        "resources": {"prometheus": {"config": {"gateway": "localhost:9091"}}}},
     )
     return [job]

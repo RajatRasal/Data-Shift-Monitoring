@@ -27,7 +27,7 @@ class LatentVariableModel(ABC):
     def inverse_transform(self, data: np.ndarray) -> np.ndarray:
         pass
 
-    def reconstruct(self, data):
+    def reconstruct(self, data: np.ndarray) -> np.float32:
         return self.inverse_transform(self.transform(data))
 
 

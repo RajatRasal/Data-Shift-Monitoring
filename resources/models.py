@@ -1,6 +1,3 @@
-import os
-import sys
-
 from dagster import resource
 
 from models.data_drift import DRIFT_PICKLE_FILE, DriftModel, PCAPipeline

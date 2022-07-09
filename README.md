@@ -15,6 +15,8 @@ There are 4 main stages to data shift monitoring:
 
 ### Articles
 - https://madewithml.com/courses/mlops/monitoring/
+- https://towardsdatascience.com/drift-metrics-how-to-select-the-right-metric-to-analyze-drift-24da63e497e
+- https://www.jeremyjordan.me/ml-monitoring/
 
 ### Frameworks
 - https://evidentlyai.com/
@@ -26,3 +28,8 @@ There are 4 main stages to data shift monitoring:
 - Dagster - orchestration
 - Feast - feature store
 - MLFlow - model tracking and storage
+
+### Run
+- `docker pull prom/pushgateway`
+- `docker run -d -p 9091:9091 prom/pushgateway`
+- `dagit -f dag.py`
