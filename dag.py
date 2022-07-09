@@ -62,6 +62,8 @@ def pdfs_to_images(context, pdfs: List[str]) -> List[PDFPageImage]:
 def monitor_data_drift(context, input_pdfs: List[PDFPageImage]):
     # TODO: Considerations about data lineage
     # TODO: Better wrapping for img_arr and predict function
+    # TODO: Data drift model should be specific to the true distirbution of
+    #    a particular production model.
     img_arr = [pdf.image for pdf in input_pdfs]
     drift_score = context.resources.data_drift_model.predict(img_arr)
     context.resources.data_logger.log(drift_score)
@@ -127,6 +129,7 @@ def repo():
             "fs": file_systems.local_file_system,
             "ocr_model": models.ocr_model,
             "data_drift_model": models.data_drift_model,
+            "reconstruction_model": models.reconstruction_model,
             "search_index": search_indices.elasticsearch,
             # TODO: Use grafana for data logging.
             "data_logger": search_indices.elasticsearch,

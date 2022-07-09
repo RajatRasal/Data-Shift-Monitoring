@@ -1,50 +1,117 @@
-import numpy as np
+import argparse
+from abc import ABC, abstractmethod
 from typing import List
 
+import joblib
+import numpy as np
 import toolz
 from PIL import Image
 from fsspec.implementations.local import LocalFileSystem
-from joblib import dump, load
-from skimage.transform import resize
 from sklearn.decomposition import PCA
 from sklearn.metrics import mean_squared_error
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from skimage.transform import resize
 
 
-DRIFT_PICKLE_FILE = "data_drift_model.pickle"
+DRIFT_PICKLE_FILE = "/Users/work/Documents/Data-Shift-Monitoring/data_drift_model.pickle"
 RESIZE_DIM = (220, 220)
 
 
-class PCADriftModel:
-    def __init__(self):
-        self.model = load(DRIFT_PICKLE_FILE)
+class LatentVariableModel(ABC):
+    @abstractmethod
+    def transform(self, data: np.ndarray) -> np.ndarray:
+        pass
 
-    def predict(self, images) -> np.float32:
+    @abstractmethod
+    def inverse_transform(self, data: np.ndarray) -> np.ndarray:
+        pass
+
+    def reconstruct(self, data):
+        return self.inverse_transform(self.transform(data))
+
+
+class PCAPipeline(LatentVariableModel):
+    def __init__(self, n_components):
+        self.model = Pipeline([
+            ('scaler', StandardScaler()),
+            ('drift_model', PCA(n_components=n_components)),
+        ])
+
+    def transform(self, data):
+        return self.model.transform(data)
+
+    def fit(self, data):
+        self.model.fit(data)
+        return self
+
+    def explained_variance_ratio(self):
+        return self.model[-1].explained_variance_ratio_
+
+    def inverse_transform(self, data):
+        return self.model.inverse_transform(data)
+
+    def save(self, filename):
+        joblib.dump(self.model, filename)
+
+    @staticmethod
+    def load(filename):
+        model = joblib.load(filename)
+        pca_pipeline = PCAPipeline(n_components=None)
+        pca_pipeline.model = model
+        return pca_pipeline
+
+
+class DriftModel:
+    def __init__(self, drift_model: LatentVariableModel):
+        self.model = drift_model
+
+    def predict(self, images: List[np.ndarray]) -> np.ndarray:
         img_arr = np.array([
             resize(image, RESIZE_DIM)
             for image in images
         ]).reshape(-1, RESIZE_DIM[0] * RESIZE_DIM[1])
-        projection = self.model.transform(img_arr)
-        reconstructions = self.model.inverse_transform(projection)
+        reconstructions = self.model.reconstruct(img_arr)
         drift_score = mean_squared_error(img_arr, reconstructions)
         return drift_score
 
 
 if __name__ == "__main__":
-    # Fit true distribution
-    true_distribution_images = np.array([
-        resize(np.array(Image.open(img)), RESIZE_DIM)
-        for img in LocalFileSystem().glob("train/**png")
-    ]).reshape(-1, RESIZE_DIM[0] * RESIZE_DIM[1])
-    model = PCA(n_components=50).fit(true_distribution_images)
-    dump(model, DRIFT_PICKLE_FILE)
+    parser = argparse.ArgumentParser(description='Train or test')
+    parser.add_argument('--train', action=argparse.BooleanOptionalAction)
+    args = parser.parse_args()
 
-    # Predict drift score
-    test_distribution_images = [
-        np.array(Image.open(img))
-        for img in LocalFileSystem().glob("test/**png")
-    ]
-    batches = toolz.partition_all(10, test_distribution_images)
-    drift_model = PCADriftModel()
-    for batch in batches:
-        score = drift_model.predict(batch)
-        print(score)
+    if args.train:
+        # TODO: Use cmd line args to split up training and testing
+        # Fit true distribution
+        flattened_dim = RESIZE_DIM[0] * RESIZE_DIM[1]
+        true_distribution_images = np.array([
+            resize(np.array(Image.open(img)), RESIZE_DIM)
+            for img in LocalFileSystem().glob("train/**png")
+        ]).reshape(-1, flattened_dim)
+        dataset_size = true_distribution_images.shape[0]
+
+        # Find optimal number of components
+        evr_thres = 0.95
+        model = PCAPipeline(min(flattened_dim, dataset_size))
+        model.fit(true_distribution_images)
+        ev_cumsum = np.cumsum(model.explained_variance_ratio())
+        ev_index = np.abs(ev_cumsum - evr_thres).argmin()
+
+        # Fit Drift model
+        # Note: If the images are too large, then we could use IncrementalPCA or
+        #   resize them to a smaller shape.
+        model = PCAPipeline(n_components=ev_index + 1).fit(true_distribution_images)
+        model.save(DRIFT_PICKLE_FILE)
+    else:
+        # Predict drift score
+        test_distribution_images = [
+            np.array(Image.open(img))
+            for img in LocalFileSystem().glob("test/**png")
+        ]
+        batches = toolz.partition_all(10, test_distribution_images)
+        model = PCAPipeline.load(DRIFT_PICKLE_FILE)
+        drift_model = DriftModel(model)
+        for batch in batches:
+            score = drift_model.predict(batch)
+            print(score)
