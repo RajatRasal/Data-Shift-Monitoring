@@ -68,12 +68,13 @@ def pdfs_to_images(context, pdfs: List[str]) -> List[PDFPageImage]:
 
 @op(required_resource_keys={"data_drift_model"})
 def monitor_data_drift(context, input_pdfs: List[PDFPageImage]) -> float:
-    # TODO: Considerations about data lineage
     # TODO: Better wrapping for img_arr and predict function
     # TODO: Store image embedding from inside the model - histogram
     # TODO: Store embeddings from PCA - histogram
     # TODO: Data drift model should be specific to the true distirbution of
     #    a particular production model.
+    # TODO: Batchwise inference in process - maybe using dynamicout if 
+    #    the dataset is really big.
     img_arr = [pdf.image for pdf in input_pdfs]
     # TODO: If this is a large batch split up, return List[float]
     drift_score = context.resources.data_drift_model.predict(img_arr)
@@ -83,7 +84,6 @@ def monitor_data_drift(context, input_pdfs: List[PDFPageImage]) -> float:
 
 @op(required_resource_keys={"prometheus"})
 def store_data_drift(context, data_drift_score: float):
-    # Model id, dagster run id, score
     time_gauge = Gauge(
         'drift_score_time_unixtime',
         'Time when drift score was calculated',
@@ -101,6 +101,7 @@ def store_data_drift(context, data_drift_score: float):
         grouping_key={
             "ocr_model_version": "test",
             "drift_model_version": "test",
+            "dagster_run_id": context.run_id,
         },
     )
 
@@ -150,9 +151,9 @@ def store_predictions(context, result: List[PDFOCRResult]):
 def _pipeline(pdf_paths):
     datapoints = pdfs_to_images(pdf_paths)
     store_data_drift(monitor_data_drift(datapoints))
-    predictions = ocr_predictions(datapoints)
-    store_prediction_metrics(calculate_prediction_metrics(predictions))
-    store_predictions(predictions)
+    # predictions = ocr_predictions(datapoints)
+    # store_prediction_metrics(calculate_prediction_metrics(predictions))
+    # store_predictions(predictions)
 
 
 @graph
