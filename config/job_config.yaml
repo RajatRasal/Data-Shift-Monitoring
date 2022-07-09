@@ -1,0 +1,9 @@
+ops:
+  find_pdfs:
+    config:
+      input_path: OCR_TEXT
+
+resources:
+  prometheus:
+    config:
+      gateway: localhost:9091

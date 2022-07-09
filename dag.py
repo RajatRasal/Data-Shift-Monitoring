@@ -1,6 +1,13 @@
 from typing import List
 
-from dagster import get_dagster_logger, graph, op, repository
+from dagster import (
+    get_dagster_logger,
+    graph,
+    op,
+    repository,
+    file_relative_path,
+    config_from_files, 
+)
 from dagster_prometheus.resources import prometheus_resource
 from prometheus_client import Gauge
 
@@ -143,9 +150,9 @@ def store_predictions(context, result: List[PDFOCRResult]):
 def _pipeline(pdf_paths):
     datapoints = pdfs_to_images(pdf_paths)
     store_data_drift(monitor_data_drift(datapoints))
-    # predictions = ocr_predictions(datapoints)
-    # store_prediction_metrics(calculate_prediction_metrics(predictions))
-    # store_predictions(predictions)
+    predictions = ocr_predictions(datapoints)
+    store_prediction_metrics(calculate_prediction_metrics(predictions))
+    store_predictions(predictions)
 
 
 @graph
@@ -174,7 +181,8 @@ def repo():
             # TODO: Use prometheus for data logging.
             "prometheus": prometheus_resource,
         },
-        config={"ops": {"find_pdfs": {"config": {"input_path": "OCR_TEXT"}}},
-        "resources": {"prometheus": {"config": {"gateway": "localhost:9091"}}}},
+        config=config_from_files(
+            [file_relative_path(__file__, "config/job_config.yaml")]
+        ),
     )
     return [job]
