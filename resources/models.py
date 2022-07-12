@@ -14,6 +14,7 @@ def data_drift_model(init_context):
     model = init_context.resources.reconstruction_model
     return DriftModel(model)
 
+
 @resource
 def reconstruction_model():
     pca_pipeline = PCAPipeline.load(DRIFT_PICKLE_FILE)

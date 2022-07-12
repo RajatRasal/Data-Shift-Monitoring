@@ -1,5 +1,8 @@
+import os
+import tempfile
 from typing import List
 
+from PIL import Image
 from dagster import (
     get_dagster_logger,
     graph,
@@ -15,6 +18,7 @@ from models.data import (
     PDFPageImage,
     get_images_from_pdf,
     find_pdfs_by_glob,
+    create_es_records,
 )
 from models.ocr import PDFOCRResult
 from resources import file_systems, search_indices, models
@@ -96,6 +100,7 @@ def store_data_drift(context, data_drift_score: float):
     )
     time_gauge.set_to_current_time()
     drift_score_gauge.set(data_drift_score)
+    # TODO: Include OCR and drift model versions
     context.resources.prometheus.push_to_gateway(
         job='drift_score',
         grouping_key={
@@ -142,10 +147,29 @@ def store_prediction_metrics(context, result: List[PDFOCRResult]):
     pass
 
 
-@op(required_resource_keys={"fs", "search_index"})
-def store_predictions(context, result: List[PDFOCRResult]):
-    # store writing to es and images to s3
-    pass
+@op(required_resource_keys={"search_index"})
+def store_text(context, results: List[PDFOCRResult]):
+    # No need for try/catch here. This should fail loudly.
+    es_records = create_es_records(results, context.run_id, "test")
+    context.resources.search_index.bulk_write(es_records)
+
+
+@op(config_schema={"base_dir": str}, required_resource_keys={"fs"})
+def store_images(context, results: List[PDFOCRResult]):
+    # Store separate images of each pdf in fs
+    # /pdf_name/page_no.img
+    # TODO: Error handling
+    for result in results:
+        for det in enumerate(result.detections):
+            with tempfile.TemporaryFile() as f:
+                img = Image.fromarray(det.image)
+                img.save(f, "PNG")
+                fs_filename = os.path.join(
+                    context.op_config["base_dir"],
+                    det.pdf_name,
+                    det.page_no
+                )
+                context.fs.upload(fs_filename, f.name)
 
 
 def _pipeline(pdf_paths):
