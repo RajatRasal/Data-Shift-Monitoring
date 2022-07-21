@@ -155,25 +155,25 @@ def store_text(context, results: List[PDFOCRResult]):
 
 
 @op(config_schema={"base_dir": str}, required_resource_keys={"fs"})
-def store_images(context, results: List[PDFOCRResult]):
+def store_images(context, page_images: List[PDFPageImage]):
     # Store separate images of each pdf in fs
     # /pdf_name/page_no.img
     # TODO: Error handling
-    for result in results:
-        for det in enumerate(result.detections):
-            with tempfile.TemporaryFile() as f:
-                img = Image.fromarray(det.image)
-                img.save(f, "PNG")
-                fs_filename = os.path.join(
-                    context.op_config["base_dir"],
-                    det.pdf_name,
-                    det.page_no
-                )
-                context.fs.upload(fs_filename, f.name)
+    for page_image in page_images:
+        with tempfile.TemporaryFile() as f:
+            img = Image.fromarray(page_image.image)
+            img.save(f, "PNG")
+            fs_filename = os.path.join(
+                context.op_config["base_dir"],
+                page_image.pdf_name,
+                page_image.page_no,
+            )
+            context.fs.upload(fs_filename, f.name)
 
 
 def _pipeline(pdf_paths):
     datapoints = pdfs_to_images(pdf_paths)
+    store_images(datapoints)
     store_data_drift(monitor_data_drift(datapoints))
     # predictions = ocr_predictions(datapoints)
     # store_prediction_metrics(calculate_prediction_metrics(predictions))

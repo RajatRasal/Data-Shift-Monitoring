@@ -34,8 +34,21 @@ There are 4 main stages to data shift monitoring:
 - Postgres - state management https://qbox.io/blog/maximize-guide-elasticsearch-indexing-performance-part-1?utm_source=qbox.io&utm_medium=article&utm_campaign=maximize-guide-elasticsearch-indexing-performance-part-2, https://qbox.io/blog/maximize-guide-elasticsearch-indexing-performance-part-2 
 
 ### Run
+#### Prometheus
 - `docker pull prom/pushgateway`
 - `docker run -d -p 9091:9091 prom/pushgateway`
+
+#### Minio
+- ```docker run \
+  -p 9000:9000 \
+  -p 9001:9001 \
+  -e "MINIO_ROOT_USER=123" \
+  -e "MINIO_ROOT_PASSWORD=12345678" \
+  quay.io/minio/minio server /data --console-address ":9001"```
+- `brew install minio/stable/mc`
+- `mc --insecure alias set minio http://localhost:9000 123 12345678`
+- `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 aws --endpoint-url http://localhost:9000 s3 ls`
+
 - `dagit -f dag.py`
 
 ### TODO:
@@ -49,4 +62,4 @@ Postgres:
 1. State for each image - stored, ocr, es
 1. Tables - PDF names -> (PDF, image, states) <- state
 
-Helm charts for all services - dagster, minio, flask app, bootstrap frontend, elasticsearch, grafana, prometheus
+Helm charts OR Docker compose for all services - dagster, minio, flask app, bootstrap frontend, elasticsearch, grafana, prometheus
