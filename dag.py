@@ -159,18 +159,30 @@ def store_images(context, page_images: List[PDFPageImage]):
     # Store separate images of each pdf in fs
     # /pdf_name/page_no.img
     # TODO: Error handling - if failed log in postgres
+    # TODO: Error handling - if base_dir does not exist
     for page_image in page_images:
         with tempfile.NamedTemporaryFile(mode="wb") as f:
             # Save image to temporary file.
+            # TODO: Error handling if we cannot write to the file
             img = Image.fromarray(page_image.image)
             img.save(f, "PNG")
-            # Build output folder name and file name.
-            fs_dir = context.op_config["base_dir"] + page_image.pdf_name
-            fs_filename = fs_dir + "/" + str(page_image.page_no)
-            # Create folder and file if they do not exist already.
+
+            # Build output folder name.
+            fs_dir = os.path.join(
+                context.op_config["base_dir"],
+                page_image.pdf_name,
+            )
+            # Create folder if does not exist already.
+            # TODO: Error handling
             if not context.resources.fs.isdir(fs_dir):
                 context.resources.fs.makedir(fs_dir)
                 get_dagster_logger().info(f"Created {fs_dir}")
+
+            fs_filename = os.path.join(
+                fs_dir,
+                str(page_image.page_no),
+            )
+            # TODO: Error handling
             if not context.resources.fs.exists(fs_filename):
                 context.resources.fs.upload(f.name, fs_filename)
                 get_dagster_logger().info(f"Uploaded {fs_filename}")
@@ -200,8 +212,8 @@ def failure_pipeline():
 @repository
 def repo():
     # TODO: Automatic trigger with minio when new data is dumped into it.
-    job = pipeline.to_job(
-        name="OCR_test_job",
+    local_job = pipeline.to_job(
+        name="OCR_local",
         resource_defs={
             "fs": file_systems.local_file_system,
             "ocr_model": models.ocr_model,
@@ -215,4 +227,19 @@ def repo():
             [file_relative_path(__file__, "config/job_config.yaml")]
         ),
     )
-    return [job]
+    remote_job = pipeline.to_job(
+        name="OCR_remote",
+        resource_defs={
+            "fs": file_systems.s3_file_system,
+            "ocr_model": models.ocr_model,
+            "data_drift_model": models.data_drift_model,
+            "reconstruction_model": models.reconstruction_model,
+            "search_index": search_indices.elasticsearch,
+            # TODO: Use prometheus for data logging.
+            "prometheus": prometheus_resource,
+        },
+        config=config_from_files(
+            [file_relative_path(__file__, "config/s3_job_config.yaml")]
+        ),
+    )
+    return [local_job, remote_job]

@@ -1,4 +1,4 @@
-from dagster import resource
+from dagster import resource, Noneable
 
 from s3fs import S3FileSystem
 from fsspec.implementations.local import LocalFileSystem
@@ -9,6 +9,10 @@ def local_file_system():
     return LocalFileSystem()
 
 
-@resource
-def s3_file_system():
-    return S3FileSystem()
+@resource(config_schema={"endpoint_url": Noneable(str)})
+def s3_file_system(context):
+    return S3FileSystem(
+        client_kwargs={
+            "endpoint_url": context.resource_config["endpoint_url"],
+        }
+    )

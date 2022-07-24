@@ -44,12 +44,14 @@ There are 4 main stages to data shift monitoring:
   -p 9001:9001 \
   -e "MINIO_ROOT_USER=123" \
   -e "MINIO_ROOT_PASSWORD=12345678" \
+  -v "/Users/work/Documents/Data-Shift-Monitoring/.minio_data:/data" \
   quay.io/minio/minio server /data --console-address ":9001"```
 - `brew install minio/stable/mc`
 - `mc --insecure alias set minio http://localhost:9000 123 12345678`
-- `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 aws --endpoint-url http://localhost:9000 s3 ls`
+- `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 aws --endpoint-url http://localhost:9000 s3 mb --ignore-existing landing-bay`
+- `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 aws --endpoint-url http://localhost:9000 s3 mb --ignore-existing pdf-pages`
 
-- `dagit -f dag.py`
+- `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 dagit -f dag.py`
 
 ### TODO:
 FastAPI:

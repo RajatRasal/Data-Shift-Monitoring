@@ -1,0 +1,15 @@
+ops:
+  find_pdfs:
+    config:
+      input_path: landing-bay
+  store_images:
+    config:
+      base_dir: pdf-pages
+
+resources:
+  prometheus:
+    config:
+      gateway: localhost:9091
+  fs:
+    config:
+      endpoint_url: http://localhost:9000
