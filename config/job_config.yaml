@@ -5,8 +5,19 @@ ops:
   store_images:
     config:
       base_dir: /Users/work/Documents/Data-Shift-Monitoring/pdf_pages
+  store_text:
+    config:
+      index: ocr_text
 
 resources:
   prometheus:
     config:
       gateway: localhost:9091
+  search_index:
+    config:
+      endpoint_url: localhost:9200
+      use_ssl: False
+      verify_certs: False
+      chunk_size: 10000
+      thread_count: 16
+      queue_size: 16

@@ -51,6 +51,10 @@ There are 4 main stages to data shift monitoring:
 - `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 aws --endpoint-url http://localhost:9000 s3 mb --ignore-existing landing-bay`
 - `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 aws --endpoint-url http://localhost:9000 s3 mb --ignore-existing pdf-pages`
 
+#### Elasticsearch
+- `docker-compose -f infra/elasticsearch/docker-compose.yaml up`
+
+#### Dagit
 - `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 dagit -f dag.py`
 
 ### TODO:

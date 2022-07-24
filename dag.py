@@ -16,11 +16,11 @@ from prometheus_client import Gauge
 
 from models.data import (
     PDFPageImage,
+    PDFOCRResult,
     get_images_from_pdf,
     find_pdfs_by_glob,
-    create_es_records,
+    create_es_actions,
 )
-from models.ocr import PDFOCRResult
 from resources import file_systems, search_indices, models
 
 
@@ -147,11 +147,22 @@ def store_prediction_metrics(context, result: List[PDFOCRResult]):
     pass
 
 
-@op(required_resource_keys={"search_index"})
+@op(required_resource_keys={"search_index"}, config_schema={"index": str})
 def store_text(context, results: List[PDFOCRResult]):
-    # No need for try/catch here. This should fail loudly.
-    es_records = create_es_records(results, context.run_id, "test")
-    context.resources.search_index.bulk_write(es_records)
+    # TODO: Error handling
+    TEST_MODEL_VERSION = 0
+    es_records = create_es_actions(
+        results,
+        context.run_id,
+        TEST_MODEL_VERSION,
+        context.op_config["index"]
+    )
+    errors = context.resources.search_index.bulk_write(
+        es_records,
+        get_dagster_logger(),
+    )
+    if errors:
+        raise Exception(f"Failed to index {len(errors)} documents")
 
 
 @op(config_schema={"base_dir": str}, required_resource_keys={"fs"})
@@ -192,9 +203,9 @@ def _pipeline(pdf_paths):
     datapoints = pdfs_to_images(pdf_paths)
     store_images(datapoints)
     store_data_drift(monitor_data_drift(datapoints))
-    # predictions = ocr_predictions(datapoints)
+    predictions = ocr_predictions(datapoints)
     # store_prediction_metrics(calculate_prediction_metrics(predictions))
-    # store_predictions(predictions)
+    store_text(predictions)
 
 
 @graph

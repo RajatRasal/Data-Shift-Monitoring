@@ -33,6 +33,7 @@ class LatentVariableModel(ABC):
 
 class PCAPipeline(LatentVariableModel):
     def __init__(self, n_components):
+        # TODO: Include flatten + inverse in the pipeline
         self.model = Pipeline([
             ('scaler', StandardScaler()),
             ('drift_model', PCA(n_components=n_components)),

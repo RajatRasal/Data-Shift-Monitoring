@@ -1,24 +1,8 @@
-from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List
 
 import easyocr
-import numpy as np
-from models.data import PDFPageImage
 
-
-COORD_TYPE = Tuple[int, int]
-
-@dataclass
-class OCRResult:
-    boxes: Tuple[COORD_TYPE, COORD_TYPE, COORD_TYPE, COORD_TYPE]
-    text: str
-    confidence: float
-
-
-@dataclass
-class PDFOCRResult:
-    pdf_page_image: PDFPageImage
-    detections: List[OCRResult]
+from models.data import PDFPageImage, OCRResult
 
 
 class OCRModel:
