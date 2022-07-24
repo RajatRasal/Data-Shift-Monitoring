@@ -158,17 +158,22 @@ def store_text(context, results: List[PDFOCRResult]):
 def store_images(context, page_images: List[PDFPageImage]):
     # Store separate images of each pdf in fs
     # /pdf_name/page_no.img
-    # TODO: Error handling
+    # TODO: Error handling - if failed log in postgres
     for page_image in page_images:
-        with tempfile.TemporaryFile() as f:
+        with tempfile.NamedTemporaryFile(mode="wb") as f:
+            # Save image to temporary file.
             img = Image.fromarray(page_image.image)
             img.save(f, "PNG")
-            fs_filename = os.path.join(
-                context.op_config["base_dir"],
-                page_image.pdf_name,
-                page_image.page_no,
-            )
-            context.fs.upload(fs_filename, f.name)
+            # Build output folder name and file name.
+            fs_dir = context.op_config["base_dir"] + page_image.pdf_name
+            fs_filename = fs_dir + "/" + str(page_image.page_no)
+            # Create folder and file if they do not exist already.
+            if not context.resources.fs.isdir(fs_dir):
+                context.resources.fs.makedir(fs_dir)
+                get_dagster_logger().info(f"Created {fs_dir}")
+            if not context.resources.fs.exists(fs_filename):
+                context.resources.fs.upload(f.name, fs_filename)
+                get_dagster_logger().info(f"Uploaded {fs_filename}")
 
 
 def _pipeline(pdf_paths):

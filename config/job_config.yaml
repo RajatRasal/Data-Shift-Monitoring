@@ -2,6 +2,9 @@ ops:
   find_pdfs:
     config:
       input_path: OCR_TEXT
+  store_images:
+    config:
+      base_dir: /Users/work/Documents/Data-Shift-Monitoring/pdf_pages
 
 resources:
   prometheus:
