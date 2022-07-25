@@ -54,6 +54,9 @@ There are 4 main stages to data shift monitoring:
 #### Elasticsearch
 - `docker-compose -f infra/elasticsearch/docker-compose.yaml up`
 
+#### MLFlow
+TODO: Fill in
+
 #### Dagit
 - `AWS_ACCESS_KEY_ID=123 AWS_SECRET_ACCESS_KEY=12345678 dagit -f dag.py`
 

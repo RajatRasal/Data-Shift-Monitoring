@@ -56,15 +56,19 @@ def pdfs_to_images(context, pdfs: List[str]) -> List[PDFPageImage]:
     results = []
     # TODO: Store each image using distributed file system resources
     #   If the images exist, then get them all, else create them.
+    tmp = tempfile.NamedTemporaryFile()
+
     for pdf in pdfs:
         get_dagster_logger().info(f"Converting {pdf}")
         try:
-            _images = get_images_from_pdf(context.resources.fs, pdf)
+            _images = get_images_from_pdf(context.resources.fs, pdf, tmp.name)
         except Exception as e:
-            get_dagster_logger().info(f"Error processing {pdf}")
-            get_dagster_logger().exception(str(e))
+            get_dagster_logger().exception(f"Error processing {pdf} + {str(e)}")
         else:
             results.extend(_images)
+
+    tmp.close()
+
     get_dagster_logger().info(f"Found {len(results)} images")
     # TODO: If results empty do not continue
     return results

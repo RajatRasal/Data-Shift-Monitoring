@@ -1,8 +1,8 @@
 import logging
 
+from dagster import resource
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import parallel_bulk
-from dagster import resource
 
 
 class ES:

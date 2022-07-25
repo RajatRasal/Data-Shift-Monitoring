@@ -33,16 +33,38 @@ def find_pdfs_by_glob(fs, dir: str) -> List[str]:
     return fs.glob(f"{dir}/**pdf")
 
 
-def get_images_from_pdf(fs, pdf_file_name) -> List[PDFPageImage]:
-    results = []
-    _tempfile = tempfile.NamedTemporaryFile()
-    fs.get(pdf_file_name, _tempfile.name)
-    images = convert_from_path(_tempfile.name)
-    for page_no, image in enumerate(images):
-        img_arr = np.array(image).astype(np.uint8)
-        results.append(PDFPageImage(pdf_file_name, page_no, img_arr))
-    _tempfile.close()
-    return results
+def get_images_from_pdf(
+    fs,
+    remote_file_name: str,
+    local_file_name: str
+) -> List[PDFPageImage]:
+    try:
+        fs.get(remote_file_name, local_file_name)
+    except Exception as e:
+        # TODO: File downloading error
+        # Get stack trace
+        raise DownloadException(
+            msg=f"Cannot download {remote_file_name}",
+            further_info=str(e)
+        )
+
+    try:
+        images = convert_from_path(local_file_name)
+    except Exception as e:
+        # TODO: File loading error
+        raise ImageToPDFConversionError(
+            msg=f"Cannot convert {local_file_name} to pdf",
+            further_info=str(e)
+        )
+
+    return [
+        PDFPageImage(
+            remote_file_name,
+            page_no,
+            np.array(image).astype(np.uint8),
+        )
+        for page_no, image in enumerate(images)
+    ]
 
 
 def create_es_actions(
